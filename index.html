@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>太鼓の達人風 - フルコンボの宴</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      margin: 0;
+      background: #1e1e24;
+      color: #fff;
+      font-family: sans-serif;
+      text-align: center;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #score-board {
+      height: 60px;
+      line-height: 60px;
+      font-size: 22px;
+      font-weight: bold;
+      background: #2b2d42;
+      border-bottom: 3px solid #ff4757;
+    }
+    #lane {
+      position: relative;
+      height: 120px;
+      background: #3d405b;
+      border-top: 4px solid #8d99ae;
+      border-bottom: 4px solid #8d99ae;
+      overflow: hidden;
+    }
+    #target {
+      position: absolute;
+      left: 60px;
+      top: 10px;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: 6px dashed #fff;
+      box-sizing: border-box;
+    }
+    .note {
+      position: absolute;
+      top: 20px;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 4px solid #fff;
+      box-sizing: border-box;
+    }
+    .note.don { background: #ff4757; }
+    .note.ka { background: #1e90ff; }
+    #judgment {
+      height: 40px;
+      line-height: 40px;
+      font-size: 28px;
+      font-weight: bold;
+      color: #ffda79;
+    }
+    #controls {
+      flex: 1;
+      display: flex;
+      padding: 10px;
+      gap: 10px;
+    }
+    .btn {
+      flex: 1;
+      border-radius: 20px;
+      font-size: 32px;
+      font-weight: bold;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+    .btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+    }
+    #btn-ka, #btn-ka2 { background: #1e90ff; }
+    #btn-don { background: #ff4757; }
+    #start-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(15, 15, 20, 0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      padding: 20px;
+    }
+    #file-input {
+      display: none;
+    }
+    .select-btn {
+      padding: 12px 25px;
+      font-size: 18px;
+      background: #4a4e69;
+      color: white;
+      border: 2px solid #9a8c98;
+      border-radius: 30px;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    #start-btn {
+      padding: 18px 45px;
+      font-size: 28px;
+      font-weight: bold;
+      background: #ff4757;
+      color: white;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #b32b37;
+    }
+    #start-btn:disabled {
+      background: #555;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+    #status-text {
+      color: #ffda79;
+      margin-top: 15px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <div id="start-overlay">
+      <h1 style="color: #ffda79; margin-bottom: 10px;">フルコンボの宴</h1>
+      <label class="select-btn" for="file-input">「フルコンボの宴.mp4」を選択</label>
+      <input type="file" id="file-input" accept="video/mp4,audio/*">
+      <button id="start-btn" disabled>スタート！</button>
+      <div id="status-text">ファイルを選択してください</div>
+    </div>
+
+    <div id="score-board">SCORE: <span id="score">0</span> | COMBO: <span id="combo">0</span></div>
+    
+    <div id="lane">
+      <div id="target"></div>
+    </div>
+    
+    <div id="judgment"></div>
+
+    <div id="controls">
+      <div class="btn" id="btn-ka">カッ</div>
+      <div class="btn" id="btn-don">ドン</div>
+      <div class="btn" id="btn-ka2">カッ</div>
+    </div>
+  </div>
+
+  <audio id="audio-player"></audio>
+
+  <script>
+    // 『フルコンボの宴』用譜面データ (曲の秒数, タイプ)
+    const chart = [
+      { time: 1.0, type: 'don' }, { time: 1.5, type: 'don' }, { time: 2.0, type: 'ka' },
+      { time: 2.8, type: 'don' }, { time: 3.3, type: 'don' }, { time: 3.8, type: 'ka' },
+      { time: 4.5, type: 'don' }, { time: 4.8, type: 'don' }, { time: 5.1, type: 'don' }, { time: 5.4, type: 'ka' },
+      { time: 6.2, type: 'don' }, { time: 6.5, type: 'don' }, { time: 7.0, type: 'ka' },
+      { time: 8.0, type: 'don' }, { time: 8.5, type: 'ka' }, { time: 9.0, type: 'don' },
+      { time: 9.8, type: 'don' }, { time: 10.1, type: 'don' }, { time: 10.4, type: 'ka' }, { time: 10.7, type: 'ka' },
+      { time: 11.5, type: 'don' }, { time: 12.0, type: 'don' }, { time: 12.5, type: 'don' }, { time: 13.0, type: 'ka' },
+      { time: 14.0, type: 'don' }, { time: 14.3, type: 'don' }, { time: 14.6, type: 'don' }, { time: 15.0, type: 'ka' }
+    ];
+
+    const audioPlayer = document.getElementById('audio-player');
+    const fileInput = document.getElementById('file-input');
+    const startBtn = document.getElementById('start-btn');
+    const statusText = document.getElementById('status-text');
+    const startOverlay = document.getElementById('start-overlay');
+    const lane = document.getElementById('lane');
+    const scoreEl = document.getElementById('score');
+    const comboEl = document.getElementById('combo');
+    const judgmentEl = document.getElementById('judgment');
+
+    let score = 0;
+    let combo = 0;
+    let isPlaying = false;
+    const targetX = 60 + 50; // 判定位置 (110px)
+    const noteSpeed = 450; // ノーツ速度 (px/秒)
+    const spawnX = window.innerWidth;
+    const travelTime = (spawnX - targetX) / noteSpeed;
+
+    let activeNotes = [];
+    let chartIndex = 0;
+
+    // ファイルが選択されたときの処理
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const fileURL = URL.createObjectURL(file);
+        audioPlayer.src = fileURL;
+        startBtn.disabled = false;
+        statusText.textContent = `選択完了: ${file.name}`;
+      }
+    });
+
+    // 演奏スタート
+    startBtn.addEventListener('click', () => {
+      startOverlay.style.display = 'none';
+      isPlaying = true;
+      audioPlayer.play();
+      requestAnimationFrame(gameLoop);
+    });
+
+    // ゲームメインループ
+    function gameLoop() {
+      if (!isPlaying) return;
+
+      const currentTime = audioPlayer.currentTime;
+
+      // ノーツ生成
+      while (chartIndex < chart.length && chart[chartIndex].time - travelTime <= currentTime) {
+        createNote(chart[chartIndex]);
+        chartIndex++;
+      }
+
+      // ノーツ移動と判定
+      for (let i = activeNotes.length - 1; i >= 0; i--) {
+        const note = activeNotes[i];
+        const elapsedTime = currentTime - note.spawnTime;
+        note.x = spawnX - (elapsedTime * noteSpeed);
+        note.element.style.left = `${note.x}px`;
+
+        if (note.x < targetX - 70) {
+          showJudgment('不可', '#ff5252');
+          combo = 0;
+          comboEl.textContent = combo;
+          note.element.remove();
+          activeNotes.splice(i, 1);
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function createNote(data) {
+      const el = document.createElement('div');
+      el.className = `note ${data.type}`;
+      lane.appendChild(el);
+
+      activeNotes.push({
+        element: el,
+        type: data.type,
+        targetTime: data.time,
+        spawnTime: audioPlayer.currentTime,
+        x: spawnX
+      });
+    }
+
+    function hit(type) {
+      if (!isPlaying || activeNotes.length === 0) return;
+
+      const note = activeNotes[0];
+      const noteCenterX = note.x + 40;
+      const distance = Math.abs(noteCenterX - targetX);
+
+      if (distance < 70) {
+        if (note.type === type) {
+          if (distance < 25) {
+            showJudgment('良！', '#ffda79');
+            score += 1000;
+          } else {
+            showJudgment('可', '#ffffff');
+            score += 500;
+          }
+          combo++;
+        } else {
+          showJudgment('不可', '#ff5252');
+          combo = 0;
+        }
+        scoreEl.textContent = score;
+        comboEl.textContent = combo;
+
+        note.element.remove();
+        activeNotes.shift();
+      }
+    }
+
+    function showJudgment(text, color) {
+      judgmentEl.textContent = text;
+      judgmentEl.style.color = color;
+    }
+
+    // タッチ＆キーボード操作設定
+    document.getElementById('btn-don').addEventListener('touchstart', (e) => { e.preventDefault(); hit('don'); });
+    document.getElementById('btn-ka').addEventListener('touchstart', (e) => { e.preventDefault(); hit('ka'); });
+    document.getElementById('btn-ka2').addEventListener('touchstart', (e) => { e.preventDefault(); hit('ka'); });
+
+    document.getElementById('btn-don').addEventListener('click', () => hit('don'));
+    document.getElementById('btn-ka').addEventListener('click', () => hit('ka'));
+    document.getElementById('btn-ka2').addEventListener('click', () => hit('ka'));
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'f' || e.key === 'j') hit('don');
+      if (e.key === 'd' || e.key === 'k') hit('ka');
+    });
+  </script>
+</body>
+</html>
